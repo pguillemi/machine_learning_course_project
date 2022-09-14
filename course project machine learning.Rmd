@@ -7,24 +7,161 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+#load packages
+library(tidyverse)
+library(caret)
+library(rattle)
+library(knitr)
+
+rm(list = ls())
+
 ```
 
 ## Course Project
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+One thing that people regularly do is quantify how  much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. 
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+## Introduction
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har
 
-```{r cars}
-summary(cars)
+
+## Model building
+
+Data gathering and preprocessing is shown here. 
+Dataset consists of 19622 obsevations with 160 variables each. 
+There were many variables that were mostly populated with NA values. These were discarded. Also, there were contextual variables such as the name of the participants or data collection timestamps which didn't seem relevant at all for the purpose of fitting models were also discarded for training.
+
+```{r gathering and tidying data}
+
+#load files, download link embedded in code
+if(file.exists("./pml-training.csv")){base_training <- read_csv("./pml-training.csv", guess_max = 19000,show_col_types = FALSE)} else {
+  download.file(url = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",
+                method = "curl",
+                destfile = "./pml-training.csv" )
+base_training <- read_csv("./pml-training.csv", guess_max = 19000,show_col_types = FALSE)
+}
+
+if(file.exists("./pml-testing.csv")){testing <- read_csv("./pml-testing.csv", guess_max = 19000,show_col_types = FALSE)
+  } else {
+  download.file(url = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",
+                method = "curl",
+                destfile = "./pml-testing.csv" )
+testing <- read_csv("./pml-testing.csv", guess_max = 19000,show_col_types = FALSE)
+}
+
+#check base
+base_col <- colnames(base_training)
+base_summary <- tibble(
+  var = base_col,
+  obs_w_data = "",
+  obs_na = "",
+  distinct_val_in_obs = "",
+  class = sapply(base_training,class)
+)
+
+for(i in 1:nrow(base_summary)){
+  resu <- base_training %>% group_by(base_training[,i]) %>% 
+    summarise(num = n())
+  
+  resu_na <- resu %>% filter(is.na(resu[,1]))
+  resu_not_na <- resu %>% filter(!is.na(resu[,1]))
+  
+  base_summary$obs_w_data[i] <- sum(resu_not_na$num)
+  base_summary$obs_na[i] <- sum(resu_na$num)
+  base_summary$distinct_val_in_obs[i] <- nrow(resu_not_na)
+}
+
+#remove cols with NA and convert classe to factor
+complete <- base_summary %>% filter(obs_na == 0)
+complete_var <- as.vector(complete$var)
+base_training <- as.data.frame(base_training[,complete_var])
+base_training$classe <- as.factor(base_training$classe)
+
+#after examining "base_summary" object, first seven columns have no relevant data for prediction
+base_training <- base_training %>% 
+  select(8:ncol(base_training))
+
+#set training and validation sets, put validation set aside
+set.seed(12345)
+in_training <- createDataPartition(base_training$classe, p = 0.7, list = FALSE)
+training <- base_training[in_training,]
+
+validation <- base_training[-in_training,]
+
+plot(training$classe, main = "Number of cases for each classe in training set")
+``` 
+
+### Cross validation and model choices
+
+I decided to start with a 3 k-fold cross validation, so as to make use of the technique, but also reduce processing times in first approaches.
+This is a classification situation, so the following models were chosen to train and evaluate predictions: decision trees ("rpart"), random forests ("rf"), gradient boosting algorithms ("gbm") and linear discriminat analysis ("lda")
+Then applied predictions on validation sample, and chose the best method to use on the test samples.
+
+```{r validation and model building-testing}
+#Establish 3 k-fold cross validation for training, it is very conservative. If results are not good enough, 10 k-fold validation will be used
+train_control<- trainControl(method="cv", number=3)
+
+#model tree, load if already generated for saving time when knitting
+if(file.exists("./model_tree.RData")){
+  model_tree <- readRDS("./model_tree.RData")} else {
+model_tree <- train(classe~. , data = training, method = "rpart", trControl=train_control, tuneLength = 5)
+saveRDS(model_tree, file = "model_tree.RData")
+}
+
+#model rf
+if(file.exists("./model_rf.RData")){
+  model_rf <- readRDS("./model_rf.RData")} else {
+model_rf <- train(classe~. , data = training, method = "rf", trControl=train_control)
+saveRDS(model_rf, file = "model_rf.RData")
+}
+
+#model lda
+if(file.exists("./model_lda.RData")){
+  model_lda <- readRDS("./model_lda.RData")} else {
+model_lda <- train(classe~. , data = training, method = "lda", trControl=train_control)
+saveRDS(model_lda, file = "model_lda.RData")
+  }
+
+#model gbm
+if(file.exists("./model_gbm.RData")){
+  model_gbm <- readRDS("./model_gbm.RData")} else {
+model_gbm <- train(classe~. , data = training, method = "gbm", trControl=train_control)
+saveRDS(model_gbm, file = "model_gbm.RData")
+}
+
+#test on validation dataset
+matrix_tree <- confusionMatrix(validation$classe, predict(model_tree,validation))
+matrix_rf <- confusionMatrix(validation$classe,predict(model_rf,validation))
+matrix_lda <- confusionMatrix(validation$classe,predict(model_lda,validation))
+matrix_gbm <- confusionMatrix(validation$classe,predict(model_gbm,validation))
+
+summary <- data.frame(
+  tree = matrix_tree$overall[1],
+  rf = matrix_rf$overall[1],
+  lda = matrix_lda$overall[1],
+  gbm = matrix_gbm$overall[1]
+)
+
+kable(summary)
 ```
 
-## Including Plots
+## Final results and chosen model
+When checking on validation dataset, the accuracy is, from highest lo lowest rf, gbm, lda and decision trees.
+Random forest accuracy is above 99.4%, so no further model tuning seems necessary. However it is to note that the expected out of sample error is expected to be larger on the test set that on the training or validation sets. That being said, the attained accuracy in validation set weem fairly good enough to proceed to predict valuest on testing dataset.
+Finally, predicted values on testing dataset were obtained as follows (actual results not shown so as to preserve them)
 
-You can also embed plots, for example:
+```{r runnig model on test set}
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+#predict on test
+#apply same overall corrections first, results object contents are not shown
+complete_var_test <- complete %>% 
+  filter(var != "classe")
+complete_var_test <- complete_var_test$var
+
+testing <- testing[,complete_var_test]
+
+results <- predict(model_rf, testing)
+
 ```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
