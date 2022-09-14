@@ -185,7 +185,7 @@ pre code {
 </div>
 <div id="model-building" class="section level2">
 <h2>Model building</h2>
-<p>Data gathering and preprocessing is shown here. Dataset consists of 19622 obsevations with 160 variables each. There were many variables that were mostly populated with NA values. These were discarded. Also, there were contextual variables such as the name of the participants or data collection timestamps which didn’t seem relevant at all for the purpose of fitting models were also discarded for training.</p>
+<p>Data gathering and preprocessing is shown here. Dataset consists of 19622 observations with 160 variables. There were many variables that were mostly populated with NA values. These were discarded. Also, there were contextual variables such as the name of the participants or data collection timestamps which didn’t seem relevant at all for the purpose of fitting models were also discarded for training.</p>
 <pre class="r"><code>#load files, download link embedded in code
 if(file.exists(&quot;./pml-training.csv&quot;)){base_training &lt;- read_csv(&quot;./pml-training.csv&quot;, guess_max = 19000,show_col_types = FALSE)} else {
   download.file(url = &quot;https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv&quot;,

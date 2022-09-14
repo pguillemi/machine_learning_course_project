@@ -30,7 +30,7 @@ The data for this project come from this source: http://groupware.les.inf.puc-ri
 ## Model building
 
 Data gathering and preprocessing is shown here. 
-Dataset consists of 19622 obsevations with 160 variables each. 
+Dataset consists of 19622 observations with 160 variables. 
 There were many variables that were mostly populated with NA values. These were discarded. Also, there were contextual variables such as the name of the participants or data collection timestamps which didn't seem relevant at all for the purpose of fitting models were also discarded for training.
 
 ```{r gathering and tidying data}
